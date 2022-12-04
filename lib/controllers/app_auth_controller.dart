@@ -18,19 +18,33 @@ class AppAuthController extends ResourceController {
               message: "Поля password и username обязательны"));
     }
 
-    final User fetchedUser = User();
+    try {
+      final qFindUser = Query<User>(managedContext)
+        ..where((table) => table.username).equalTo(user.username)
+        ..returningProperties(
+            (table) => [table.id, table.salt, table.hashPassword]);
+      final findUser = await qFindUser.fetchOne();
 
-    //connect to DB
-    //find User
-    //check Password
-    //fetch User
+      if (findUser == null) {
+        throw QueryException.input("Пользователь не найден", []);
+      }
 
-    return Response.ok(AppResponseModel(data: {
-      "id": fetchedUser.id,
-      "refreshToken": fetchedUser.refreshToken,
-      "accessToken": fetchedUser.accessToken
-    }, message: "Успешная авторизация")
-        .toJson());
+      final requestHashPassword =
+          generatePasswordHash(user.password ?? "", findUser.salt ?? "");
+
+      if (requestHashPassword == findUser.hashPassword) {
+        await _updateTokens(findUser.id ?? -1, managedContext);
+        final newUser =
+            await managedContext.fetchObjectWithID<User>(findUser.id);
+        return Response.ok(AppResponseModel(
+            data: newUser?.backing.contents, message: "Успешная авторизация"));
+      } else {
+        throw QueryException.input("Пароль не верный", []);
+      }
+    } on QueryException catch (error) {
+      return Response.serverError(
+          body: AppResponseModel(message: error.message));
+    }
   }
 
   @Operation.put()
@@ -40,7 +54,7 @@ class AppAuthController extends ResourceController {
           body: AppResponseModel(
               message: "Поля email, password и username обязательны"));
     }
-    final salt = "hhklhg5g3345khhg";
+    final salt = generateRandomSalt();
     final hashPassword = generatePasswordHash(user.password ?? "", salt);
 
     try {
@@ -53,13 +67,7 @@ class AppAuthController extends ResourceController {
           ..values.hashPassword = hashPassword;
         final createdUser = await qCreateUser.insert();
         id = createdUser.asMap()["id"];
-        final Map<String, dynamic> tokens = _getTokens(id);
-
-        final qUpdateTokens = Query<User>(transaction)
-          ..where((user) => user.id).equalTo(id)
-          ..values.accessToken = tokens["access"]
-          ..values.refreshToken = tokens["refresh"];
-        await qUpdateTokens.updateOne();
+        await _updateTokens(id, transaction);
       });
 
       final userData = await managedContext.fetchObjectWithID<User>(id);
@@ -69,6 +77,16 @@ class AppAuthController extends ResourceController {
       return Response.serverError(
           body: AppResponseModel(message: error.message));
     }
+  }
+
+  Future<void> _updateTokens(int id, ManagedContext transaction) async {
+    final Map<String, dynamic> tokens = _getTokens(id);
+
+    final qUpdateTokens = Query<User>(transaction)
+      ..where((user) => user.id).equalTo(id)
+      ..values.accessToken = tokens["access"]
+      ..values.refreshToken = tokens["refresh"];
+    await qUpdateTokens.updateOne();
   }
 
   @Operation.post("refresh")
