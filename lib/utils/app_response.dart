@@ -18,15 +18,21 @@ class AppResponse extends Response {
           error: error.toString(), message: message ?? error.message);
     }
 
+    if (error is AuthorizationParserException) {
+      return AppResponseModel(
+          error: error.toString(), message: message ?? error.toString());
+    }
+
     return AppResponseModel(
-        error: error.toString(), message: message ?? "Неизвестная ощибка");
+        error: error.toString(), message: message ?? "Неизвестная ошибка");
   }
 
   AppResponse.ok({dynamic body, String? message})
       : super.ok(AppResponseModel(data: body, message: message));
 
-  AppResponse.badRequest({dynamic body, String? message})
-      : super.badRequest(body: AppResponseModel(data: body, message: message));
+  AppResponse.badRequest({String? message})
+      : super.badRequest(
+            body: AppResponseModel(message: message ?? "Ошибка запроса"));
 
   AppResponse.unauthorized({dynamic body, String? message})
       : super.unauthorized(
