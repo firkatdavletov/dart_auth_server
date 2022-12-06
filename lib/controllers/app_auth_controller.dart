@@ -1,3 +1,4 @@
+import 'package:auth/models/response_model.dart';
 import 'package:auth/models/user.dart';
 import 'package:auth/utils/app_env.dart';
 import 'package:auth/utils/app_response.dart';
@@ -82,7 +83,8 @@ class AppAuthController extends ResourceController {
       final id = AppUtils.getIdFromToken(refreshToken);
       final user = await managedContext.fetchObjectWithID<User>(id);
       if (user?.refreshToken != refreshToken) {
-        return AppResponse.unauthorized(message: "Token is not valid");
+        return Response.unauthorized(
+            body: AppResponseModel(message: "Token is not valid"));
       } else {
         await _updateTokens(id, managedContext);
         final user = await managedContext.fetchObjectWithID<User>(id);
@@ -99,8 +101,8 @@ class AppAuthController extends ResourceController {
   Map<String, dynamic> _getTokens(int id) {
     final key = AppEnv.secretKey;
 
-    final accessClaimSet =
-        JwtClaim(maxAge: Duration(hours: 1), otherClaims: {"id": id});
+    final accessClaimSet = JwtClaim(
+        maxAge: Duration(minutes: AppEnv.time), otherClaims: {"id": id});
 
     final refreshClaimSet = JwtClaim(otherClaims: {"id": id});
 
